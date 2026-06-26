@@ -7,7 +7,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v2.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v3.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
