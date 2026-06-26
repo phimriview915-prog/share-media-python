@@ -1,171 +1,162 @@
-import os
+  import os
+import secrets
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = 'chuoi_bi_mat_sieu_bao_mat_cua_rieng_ban' # Dùng để bảo mật session
-
-# --- CẤU HÌNH ĐƯỜNG DẪN VÀ DATABASE ---
-UPLOAD_FOLDER = 'static/uploads'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi', 'mov'}
-
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SECRET_KEY'] = secrets.token_hex(16)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v2.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# Khởi tạo database
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
 db = SQLAlchemy(app)
 
-# Tự động tạo thư mục chứa file upload nếu chưa có
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-
-# ==============================================================================
-# ĐỊNH NGHĨA CƠ SỞ DỮ LIỆU (DATABASE MODELS)
-# ==============================================================================
-
-# Bảng người dùng (Lưu tài khoản & mật khẩu)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password = db.Column(db.String(100), nullable=False)
 
-# Bảng dữ liệu Media (Lưu thông tin ảnh/video đã upload)
 class Media(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(200), nullable=False)
-    file_type = db.Column(db.String(10), nullable=False)  # 'image' hoặc 'video'
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
-    # Tạo mối liên kết để lấy tên người đăng dễ dàng hơn
-    user = db.relationship('User', backref=db.backref('medias', lazy=True))
+    filename = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(10), nullable=False)
+    uploader = db.Column(db.String(50), nullable=False)
+    is_temporary = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    comments = db.relationship('Comment', backref='media', cascade="all, delete-orphan", lazy=True)
 
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.String(500), nullable=False)
+    uploader = db.Column(db.String(50), nullable=False)
+    media_id = db.Column(db.Integer, db.ForeignKey('media.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# Hàm kiểm tra đuôi file xem có hợp lệ không
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def clean_expired_media():
+    now = datetime.utcnow()
+    expired_items = Media.query.filter(Media.is_temporary == True, Media.created_at < now - timedelta(hours=24)).all()
+    for item in expired_items:
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], item.filename)
+        if os.path.exists(file_path):
+            try: os.remove(file_path)
+            except: pass
+        db.session.delete(item)
+    if expired_items:
+        db.session.commit()
 
-
-# ==============================================================================
-# ĐIỀU HƯỚNG WEB (ROUTES)
-# ==============================================================================
-
-# 1. TRANG CHỦ: Hiển thị tất cả ảnh/video cho mọi người cùng xem
 @app.route('/')
 def index():
-    # Lấy toàn bộ media từ mới nhất đến cũ nhất
-    all_media = Media.query.order_by(Media.id.desc()).all()
-    return render_template('index.html', media_list=all_media)
+    if 'username' not in session:
+        return redirect('/login')
+    clean_expired_media()
+    all_media = Media.query.order_by(Media.created_at.desc()).all()
+    return render_template('index.html', media_list=all_media, current_user=session['username'])
 
-
-# 2. ĐĂNG KÝ TÀI KHOẢN
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username'].strip()
-        password = request.form['password'].strip()
-        
+        username = request.form.get('username').strip()
+        password = request.form.get('password').strip()
         if not username or not password:
-            flash('Vui lòng điền đầy đủ thông tin!')
-            return redirect(url_for('register'))
-
-        # Kiểm tra tài khoản đã tồn tại chưa
+            flash('Vui lòng điền đầy đủ tài khoản và mật khẩu!')
+            return redirect('/register')
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
-            flash('Tên đăng nhập này đã có người sử dụng!')
-            return redirect(url_for('register'))
-            
-        # Mã hóa mật khẩu trước khi lưu để bảo mật
-        hashed_password = generate_password_hash(password, method='scrypt')
-        
-        # Lưu user mới vào database
-        new_user = User(username=username, password=hashed_password)
+            flash('Tài khoản này đã tồn tại!')
+            return redirect('/register')
+        new_user = User(username=username, password=password)
         db.session.add(new_user)
         db.session.commit()
-        
-        flash('Đăng ký tài khoản thành công! Mời bạn đăng nhập.')
-        return redirect(url_for('login'))
-        
+        flash('Đăng ký tài khoản thành công! Hãy đăng nhập.')
+        return redirect('/login')
     return render_template('register.html')
 
-
-# 3. ĐĂNG NHẬP
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username'].strip()
-        password = request.form['password'].strip()
-        
-        user = User.query.filter_by(username=username).first()
-        
-        # Xác minh mật khẩu
-        if user and check_password_hash(user.password, password):
-            session['user_id'] = user.id
-            session['username'] = user.username
-            flash('Đăng nhập thành công! Chào mừng bạn quay trở lại.')
-            return redirect(url_for('index'))
+        username = request.form.get('username').strip()
+        password = request.form.get('password').strip()
+        user = User.query.filter_by(username=username, password=password).first()
+        if user:
+            session['username'] = username
+            return redirect('/')
         else:
-            flash('Tài khoản hoặc mật khẩu không chính xác!')
-            
+            flash('Sai tài khoản hoặc mật khẩu!')
+            return redirect('/login')
     return render_template('login.html')
 
-
-# 4. ĐĂNG XUẤT
-@app.route('/logout')
-def logout():
-    session.clear() # Xóa sạch phiên đăng nhập
-    flash('Bạn đã đăng xuất thành công.')
-    return redirect(url_for('index'))
-
-
-# 5. XỬ LÝ UPLOAD ẢNH / VIDEO (Chỉ dành cho thành viên đã đăng nhập)
 @app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'user_id' not in session:
-        flash('Bạn cần phải đăng nhập để tải tệp lên!')
-        return redirect(url_for('login'))
-        
+def upload():
+    if 'username' not in session:
+        return redirect('/login')
     if 'file' not in request.files:
-        flash('Không tìm thấy tệp gửi lên!')
-        return redirect(url_for('index'))
-        
+        flash('Không tìm thấy file!')
+        return redirect('/')
     file = request.files['file']
     if file.filename == '':
-        flash('Bạn chưa chọn file nào cả!')
-        return redirect(url_for('index'))
-        
-    if file and allowed_file(file.filename):
-        # Làm sạch tên file để tránh lỗi hệ thống hoặc hack đường dẫn
-        filename = secure_filename(file.filename)
-        
-        # Để tránh trùng tên file, thêm ID người dùng vào trước tên file
-        filename = f"{session['user_id']}_{filename}"
-        
-        # Lưu file vật lý vào thư mục static/uploads/
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        
-        # Phân loại xem file vừa up là ảnh hay video dựa vào đuôi file
-        ext = filename.rsplit('.', 1)[1].lower()
-        file_type = 'video' if ext in {'mp4', 'avi', 'mov'} else 'image'
-        
-        # Lưu thông tin file vào database
-        new_media = Media(filename=filename, file_type=file_type, user_id=session['user_id'])
+        flash('Bạn chưa chọn file!')
+        return redirect('/')
+    storage_type = request.form.get('storage_type')
+    is_temporary = (storage_type == 'temporary')
+    if file:
+        ext = file.filename.split('.')[-1].lower()
+        if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
+            file_type = 'image'
+        elif ext in ['mp4', 'mov', 'avi', 'mkv', 'webm']:
+            file_type = 'video'
+        else:
+            flash('Định dạng file không hỗ trợ!')
+            return redirect('/')
+        random_hex = secrets.token_hex(8)
+        secure_name = f"{random_hex}_{file.filename}"
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_name))
+        new_media = Media(filename=secure_name, file_type=file_type, uploader=session['username'], is_temporary=is_temporary)
         db.session.add(new_media)
         db.session.commit()
-        
-        flash('Tải tệp lên bảng tin thành công!')
+        flash('Tải bài viết lên thành công!')
+        return redirect('/')
+
+@app.route('/comment/<int:media_id>', methods=['POST'])
+def add_comment(media_id):
+    if 'username' not in session:
+        return redirect('/login')
+    content = request.form.get('content', '').strip()
+    if content:
+        new_comment = Comment(content=content, uploader=session['username'], media_id=media_id)
+        db.session.add(new_comment)
+        db.session.commit()
+        flash('Đã đăng bình luận!')
+    return redirect('/')
+
+@app.route('/delete/<int:media_id>', methods=['POST'])
+def delete_media(media_id):
+    if 'username' not in session:
+        return redirect('/login')
+    item = Media.query.get_or_404(media_id)
+    if item.uploader == session['username']:
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], item.filename)
+        if os.path.exists(file_path):
+            try: os.remove(file_path)
+            except: pass
+        db.session.delete(item)
+        db.session.commit()
+        flash('Đã xóa bài viết thành công!')
     else:
-        flash('Định dạng file không được hỗ trợ (Chỉ nhận JPG, PNG, GIF, MP4, AVI, MOV)!')
-        
-    return redirect(url_for('index'))
+        flash('Bạn không có quyền xóa bài viết này!')
+    return redirect('/')
 
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return redirect('/login')
 
-# ==============================================================================
-# KHỞI CHẠY DỰ ÁN
-# ==============================================================================
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all() # Tự động tạo file database.db và các bảng nếu chưa có
-    app.run(debug=True)
+        db.create_all()
+    app.run(host='0.0.0.0', port=5000, debug=True)
