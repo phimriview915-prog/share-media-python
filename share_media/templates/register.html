@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center my-5">
+    <div class="col-md-5 col-lg-4">
+        <div class="card p-4 shadow border-0">
+            <h3 class="text-center fw-bold mb-4">Đăng Ký Thành Viên</h3>
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold text-muted">Tên tài khoản mong muốn</label>
+                    <input type="text" name="username" class="form-control form-control-lg" placeholder="Ví dụ: van_a_99" required>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold text-muted">Mật khẩu bảo mật</label>
+                    <input type="password" name="password" class="form-control form-control-lg" placeholder="Nhập mật khẩu..." required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold shadow-sm">Tạo tài khoản</button>
+            </form>
+            <div class="mt-4 text-center small">
+                <span class="text-muted">Đã có tài khoản rồi?</span> 
+                <a href="{{ url_for('login') }}" class="text-success fw-bold">Quay lại Đăng nhập</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
