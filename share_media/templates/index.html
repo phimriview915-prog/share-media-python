@@ -1,47 +1,55 @@
-{% extends 'base.html' %}
-{% block content %}
+import os
+import secrets
+from flask import Flask, render_template, request, redirect
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.utils import secure_filename
 
-{% if session.get('user_id') %}
-<div class="card p-4 mb-5 shadow-sm border-0">
-    <h4 class="fw-bold mb-3">📤 Tải lên ảnh hoặc video của bạn</h4>
-    <form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data">
-        <div class="input-group">
-            <input type="file" name="file" class="form-control" accept="image/*,video/*" required>
-            <button type="submit" class="btn btn-primary px-4 fw-bold">Chia sẻ ngay</button>
-        </div>
-        <div class="form-text mt-2 text-muted">Hỗ trợ định dạng: JPG, PNG, GIF, MP4, AVI, MOV.</div>
-    </form>
-</div>
-{% else %}
-<div class="alert alert-info text-center border-0 shadow-sm py-4 mb-5">
-    <h5>💡 Bạn đang xem ở chế độ khách vãng lai</h5>
-    <p class="mb-0 text-muted">Mọi người đều có thể xem ảnh/video tại đây. Hãy <a href="{{ url_for('login') }}" class="fw-bold text-primary">Đăng nhập</a> để đăng tải khoảnh khắc của riêng bạn!</p>
-</div>
-{% endif %}
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+template_dir = os.path.join(BASE_DIR, 'Share_media', 'templates')
+static_dir = os.path.join(BASE_DIR, 'Share_media', 'static')
 
-<h3 class="fw-bold text-secondary mb-4">🌐 Bảng tin cộng đồng</h3>
-<div class="row">
-    {% for media in media_list %}
-    <div class="col-xl-4 col-md-6 mb-4">
-        <div class="card h-100 shadow-sm border-0 overflow-hidden">
-            <div class="media-container bg-dark d-flex align-items-center justify-content-center" style="height: 280px;">
-                {% if media.file_type == 'image' %}
-                    <img src="{{ url_for('static', filename='uploads/' + media.filename) }}" alt="Hình ảnh chia sẻ">
-                {% else %}
-                    <video src="{{ url_for('static', filename='uploads/' + media.filename) }}" controls></video>
-                {% endif %}
-            </div>
-            <div class="card-footer bg-white border-0 py-3 small d-flex justify-content-between align-items-center">
-                <span>Người đăng: <b class="text-dark">{{ media.user.username }}</b></span>
-                <span class="badge bg-secondary text-capitalize">{{ media.file_type }}</span>
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="col-12 text-center my-5">
-        <p class="text-muted fs-5">Chưa có nội dung nào được đăng tải. Hãy là người đầu tiên!</p>
-    </div>
-    {% endfor %}
-</div>
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+app.config['SECRET_KEY'] = secrets.token_hex(16)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media.db'
+app.config['TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = os.path.join(static_dir, 'uploads')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-{% endblock %}
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
+db = SQLAlchemy(app)
+
+class Media(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(10), nullable=False)
+    uploader = db.Column(db.String(50), default='admin')
+
+@app.route('/')
+def index():
+    all_media = Media.query.all()
+    return render_template('index.html', media_list=all_media)
+
+@app.route('/upload', methods=['POST'])
+def upload():
+    if 'file' not in request.files:
+        return redirect('/')
+    file = request.files['file']
+    if file.filename == '':
+        return redirect('/')
+    if file:
+        ext = file.filename.split('.')[-1].lower()
+        file_type = 'image' if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] else 'video'
+        random_hex = secrets.token_hex(8)
+        secure_name = f"{random_hex}_{secure_filename(file.filename)}"
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_name))
+        new_media = Media(filename=secure_name, file_type=file_type)
+        db.session.add(new_media)
+        db.session.commit()
+    return redirect('/')
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(host='0.0.0.0', port=5000, debug=True)
