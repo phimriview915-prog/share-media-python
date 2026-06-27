@@ -1,4 +1,4 @@
-  import os
+ import os
 import secrets
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash
@@ -7,8 +7,9 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v3.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Đổi hẳn sang db_v5 để hệ thống tự động reset bảng sạch sẽ, tránh lỗi xung đột cấu trúc cũ gây lỗi không up được ảnh
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v5.db'
+app.config['TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
@@ -17,6 +18,7 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 
 db = SQLAlchemy(app)
 
+# --- DATABASE MODELS ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
@@ -50,6 +52,7 @@ def clean_expired_media():
     if expired_items:
         db.session.commit()
 
+# --- ROUTES CONTROL ---
 @app.route('/')
 def index():
     if 'username' not in session:
@@ -64,7 +67,7 @@ def register():
         username = request.form.get('username').strip()
         password = request.form.get('password').strip()
         if not username or not password:
-            flash('Vui lòng điền đầy đủ tài khoản và mật khẩu!')
+            flash('Vui lòng điền đầy đủ thông tin!')
             return redirect('/register')
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
@@ -73,7 +76,7 @@ def register():
         new_user = User(username=username, password=password)
         db.session.add(new_user)
         db.session.commit()
-        flash('Đăng ký tài khoản thành công! Hãy đăng nhập.')
+        flash('Đăng ký thành công! Hãy đăng nhập.')
         return redirect('/login')
     return render_template('register.html')
 
@@ -91,19 +94,38 @@ def login():
             return redirect('/login')
     return render_template('login.html')
 
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        username = request.form.get('username').strip()
+        new_password = request.form.get('new_password').strip()
+        user = User.query.filter_by(username=username).first()
+        if user:
+            user.password = new_password
+            db.session.commit()
+            flash('Đặt lại mật khẩu thành công! Hãy đăng nhập lại.')
+            return redirect('/login')
+        else:
+            flash('Tài khoản không tồn tại trên hệ thống!')
+            return redirect('/forgot-password')
+    return render_template('forgot_password.html')
+
 @app.route('/upload', methods=['POST'])
 def upload():
     if 'username' not in session:
         return redirect('/login')
     if 'file' not in request.files:
-        flash('Không tìm thấy file!')
+        flash('Không tìm thấy tệp gửi lên!')
         return redirect('/')
+    
     file = request.files['file']
     if file.filename == '':
-        flash('Bạn chưa chọn file!')
+        flash('Bạn chưa chọn file ảnh/video nào!')
         return redirect('/')
+        
     storage_type = request.form.get('storage_type')
     is_temporary = (storage_type == 'temporary')
+    
     if file:
         ext = file.filename.split('.')[-1].lower()
         if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
@@ -113,14 +135,23 @@ def upload():
         else:
             flash('Định dạng file không hỗ trợ!')
             return redirect('/')
+            
         random_hex = secrets.token_hex(8)
-        secure_name = f"{random_hex}_{file.filename}"
+        secure_name = f"{random_hex}_{secure_filename(file.filename)}"
+        
+        # Lưu file vật lý vào thư mục static
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_name))
-        new_media = Media(filename=secure_name, file_type=file_type, uploader=session['username'], is_temporary=is_temporary)
+        
+        new_media = Media(
+            filename=secure_name,
+            file_type=file_type,
+            uploader=session['username'],
+            is_temporary=is_temporary
+        )
         db.session.add(new_media)
         db.session.commit()
-        flash('Tải bài viết lên thành công!')
-        return redirect('/')
+        flash('Đăng tải bài viết thành công!')
+    return redirect('/')
 
 @app.route('/comment/<int:media_id>', methods=['POST'])
 def add_comment(media_id):
@@ -131,7 +162,6 @@ def add_comment(media_id):
         new_comment = Comment(content=content, uploader=session['username'], media_id=media_id)
         db.session.add(new_comment)
         db.session.commit()
-        flash('Đã đăng bình luận!')
     return redirect('/')
 
 @app.route('/delete/<int:media_id>', methods=['POST'])
@@ -147,8 +177,6 @@ def delete_media(media_id):
         db.session.delete(item)
         db.session.commit()
         flash('Đã xóa bài viết thành công!')
-    else:
-        flash('Bạn không có quyền xóa bài viết này!')
     return redirect('/')
 
 @app.route('/logout')
