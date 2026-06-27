@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Góc Chia Sẻ Media</title>
+    <title>Bảng Tin Khoảnh Khắc</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #f0f2f5; font-family: system-ui, -apple-system, sans-serif; }
         .text-gradient { background: linear-gradient(45deg, #007bff, #d63384); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .card { border: none; }
-        .comment-box { max-height: 200px; overflow-y: auto; }
+        .card { border: none; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .comment-box { max-height: 180px; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -18,17 +18,17 @@
         <div class="container">
             <a class="navbar-brand fw-bold text-gradient" href="/">🎬 SHARE MEDIA</a>
             <div class="d-flex align-items-center gap-3">
-                <span class="text-white small">Xin chào, <strong>{{ current_user }}</strong>!</span>
-                <a href="/logout" class="btn btn-sm btn-outline-light rounded-pill">Đăng xuất</a>
+                <span class="text-white small">Xin chào, <strong class="text-warning">{{ current_user }}</strong>!</span>
+                <a href="/logout" class="btn btn-sm btn-outline-light rounded-pill px-3">Đăng xuất</a>
             </div>
         </div>
     </nav>
 
-    <div class="container py-4">
+    <div class="container py-4" style="max-width: 680px;">
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
-                    <div class="alert alert-info alert-dismissible fade show rounded-3 shadow-sm mx-auto" role="alert" style="max-width: 650px;">
+                    <div class="alert alert-info alert-dismissible fade show rounded-3 text-center mb-4" role="alert">
                         {{ message }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
@@ -36,82 +36,75 @@
             {% endif %}
         {% endwith %}
 
-        <div class="row justify-content-center mb-5">
-            <div class="col-md-7">
-                <div class="card p-4 shadow-sm rounded-4 bg-white">
-                    <h5 class="fw-bold mb-3">Tải lên khoảnh khắc mới</h5>
-                    <form action="/upload" method="POST" enctype="multipart/form-data">
-                        <div class="mb-3">
-                            <input class="form-control" type="file" name="file" accept="image/*,video/*" required>
-                        </div>
-                        <div class="mb-3 d-flex gap-4">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="storage_type" value="permanent" id="perm" checked>
-                                <label class="form-check-label" for="perm">Lưu trữ vĩnh viễn</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="storage_type" value="temporary" id="temp">
-                                <label class="form-check-label" for="temp">Tin tạm thời (24h) ⏳</label>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold">Chia sẻ ngay</button>
-                    </form>
+        <div class="card p-4 bg-white mb-5">
+            <h5 class="fw-bold mb-3">Tải lên khoảnh khắc mới</h5>
+            <form action="/upload" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <input class="form-control rounded-3" type="file" name="file" accept="image/*,video/*" required>
                 </div>
-            </div>
+                <div class="mb-3 d-flex gap-4 small">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="storage_type" value="permanent" id="perm" checked>
+                        <label class="form-check-label fw-bold text-secondary" for="perm">Lưu trữ vĩnh viễn</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="storage_type" value="temporary" id="temp">
+                        <label class="form-check-label fw-bold text-warning" for="temp">Tin tạm thời (Xóa sau 24h) ⏳</label>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold py-2">Chia sẻ ngay 🚀</button>
+            </form>
         </div>
 
         <h3 class="text-center mb-4 fw-bold text-gradient">✨ BẢNG TIN KHOẢNH KHẮC ✨</h3>
-        <div class="row justify-content-center">
-            <div class="col-md-7">
-                {% for item in media_list %}
-                    <div class="card mb-4 shadow-sm rounded-4 overflow-hidden bg-white">
-                        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3 border-0">
-                            <div>
-                                <span class="fw-bold text-primary">By: @{{ item.uploader }}</span>
-                                {% if item.is_temporary %}
-                                    <span class="badge bg-warning text-dark ms-2 small">Tin 24h ⏳</span>
-                                {% endif %}
-                            </div>
-                            {% if current_user == item.uploader %}
-                                <form action="/delete/{{ item.id }}" method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa bài viết này không?');">
-                                    <button type="submit" class="btn btn-sm btn-link text-danger p-0 border-0 text-decoration-none fw-bold">🗑️ Xóa</button>
-                                </form>
-                            {% endif %}
-                        </div>
-
-                        <div class="bg-light text-center border-top border-bottom">
-                            {% if item.file_type == 'video' %}
-                                <video src="/static/uploads/{{ item.filename }}" controls class="w-100" style="max-height: 450px;"></video>
-                            {% else %}
-                                <img src="/static/uploads/{{ item.filename }}" class="img-fluid w-100" alt="Shared Image" style="max-height: 500px; object-fit: contain;">
-                            {% endif %}
-                        </div>
-
-                        <div class="card-body">
-                            <div class="comment-box mb-3">
-                                <h6 class="fw-bold mb-2 text-secondary">💬 Bình luận ({{ item.comments|length }}):</h6>
-                                {% for comment in item.comments %}
-                                    <div class="p-2 bg-light rounded-3 mb-2 small">
-                                        <strong class="text-dark">{{ comment.uploader }}:</strong> {{ comment.content }}
-                                    </div>
-                                {% else %}
-                                    <p class="text-muted small italic mb-0">Chưa có bình luận nào.</p>
-                                {% endfor %}
-                            </div>
-
-                            <form action="/comment/{{ item.id }}" method="POST" class="d-flex gap-2">
-                                <input type="text" name="content" class="form-control form-control-sm rounded-pill" placeholder="Viết bình luận công khai..." required>
-                                <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3">Gửi</button>
-                            </form>
-                        </div>
+        
+        {% for item in media_list %}
+            <div class="card mb-4 bg-white overflow-hidden">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center py-3 border-0">
+                    <div>
+                        <span class="fw-bold text-primary">👤 @{{ item.uploader }}</span>
+                        {% if item.is_temporary %}
+                            <span class="badge bg-warning text-dark ms-2 small">Tin 24h ⏳</span>
+                        {% endif %}
                     </div>
-                {% else %}
-                    <div class="text-center py-5">
-                        <p class="text-muted fs-5">Bảng tin trống. Hãy đăng bức ảnh đầu tiên lên nhé! 🚀</p>
+                    {% if current_user == item.uploader %}
+                        <form action="/delete/{{ item.id }}" method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa bài viết này không?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-pill px-2">🗑️ Xóa</button>
+                        </form>
+                    {% endif %}
+                </div>
+
+                <div class="bg-light text-center border-top border-bottom">
+                    {% if item.file_type == 'video' %}
+                        <video src="/static/uploads/{{ item.filename }}" controls class="w-100" style="max-height: 450px;"></video>
+                    {% else %}
+                        <img src="/static/uploads/{{ item.filename }}" class="img-fluid w-100" alt="Shared Image" style="max-height: 500px; object-fit: contain;">
+                    {% endif %}
+                </div>
+
+                <div class="card-body">
+                    <div class="comment-box mb-3">
+                        <h6 class="fw-bold mb-2 text-secondary">💬 Bình luận ({{ item.comments|length }}):</h6>
+                        {% for comment in item.comments %}
+                            <div class="p-2 bg-light rounded-3 mb-2 small">
+                                <strong class="text-dark">{{ comment.uploader }}:</strong> {{ comment.content }}
+                            </div>
+                        {% else %}
+                            <p class="text-muted small italic mb-0">Chưa có bình luận nào. Hãy gửi bình luận đầu tiên!</p>
+                        {% endfor %}
                     </div>
-                {% endfor %}
+
+                    <form action="/comment/{{ item.id }}" method="POST" class="d-flex gap-2">
+                        <input type="text" name="content" class="form-control form-control-sm rounded-pill px-3" placeholder="Viết bình luận công khai..." required>
+                        <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3">Gửi</button>
+                    </form>
+                </div>
             </div>
-        </div>
+        {% else %}
+            <div class="text-center py-5">
+                <p class="text-muted fs-5">Bảng tin trống. Hãy đăng bức ảnh đầu tiên lên nhé! 🚀</p>
+            </div>
+        {% endfor %}
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
