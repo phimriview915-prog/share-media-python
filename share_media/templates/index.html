@@ -44,10 +44,7 @@
                         {% endif %}
                         <div class="mt-2 d-flex justify-content-between align-items-center small px-1">
                             <span>Người đăng: <strong>{{ item.uploader }}</strong></span>
-                            
-                            <form action="/delete/{{ item.id }}" method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa mục này không?');">
-                                <button type="submit" class="btn btn-sm btn-danger py-0 px-2 small" style="font-size: 11px;">Xóa 🗑️</button>
-                            </form>
+                            <span class="badge bg-secondary">{{ item.file_type|upper }}</span>
                         </div>
                     </div>
                 </div>
