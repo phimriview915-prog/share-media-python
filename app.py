@@ -1,10 +1,10 @@
- import os
+import os
 import secrets
 from flask import Flask, render_template, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
-# Đổi cấu hình về thư mục gốc (Root) để khớp hoàn toàn với cấu trúc hiện tại của bạn
+# Đổi cấu hình về thư mục gốc để khớp hoàn toàn với vị trí index.html hiện tại của bạn
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 template_dir = BASE_DIR  # Tìm index.html ở ngay ngoài cùng
 static_dir = BASE_DIR    # Tìm thư mục static ở ngay ngoài cùng
