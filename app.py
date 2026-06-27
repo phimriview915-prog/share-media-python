@@ -4,16 +4,16 @@ from flask import Flask, render_template, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
-# Đổi cấu hình về thư mục gốc để khớp hoàn toàn với vị trí index.html hiện tại của bạn
+# Cấu hình chính xác theo cấu trúc thư mục thực tế trên GitHub của bạn
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-template_dir = BASE_DIR  # Tìm index.html ở ngay ngoài cùng
-static_dir = BASE_DIR    # Tìm thư mục static ở ngay ngoài cùng
+template_dir = os.path.join(BASE_DIR, 'share_media', 'templates')
+static_dir = os.path.join(BASE_DIR, 'share_media', 'static')
 
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media.db'
 app.config['TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(static_dir, 'static/uploads')
+app.config['UPLOAD_FOLDER'] = os.path.join(static_dir, 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
