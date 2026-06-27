@@ -1,25 +1,21 @@
-import os
+   import os
 import secrets
-from datetime import datetime, timedelta
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from datetime import datetime
+from flask import Flask, render_template, request, redirect, session, flash, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = secrets.token_hex(16)
+# Chỉ định rõ ràng thư mục chứa giao diện (templates) và tệp tải lên (static)
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+template_dir = os.path.join(BASE_DIR, 'Share_media', 'templates')
+static_dir = os.path.join(BASE_DIR, 'Share_media', 'static')
 
-# GIỮ NGUYÊN FILE DATABASE CŨ CỦA BẠN ĐỂ KHÔI PHỤC LẠI ẢNH ĐÃ ĐĂNG
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+app.config['SECRET_KEY'] = secrets.token_hex(16)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media.db'
 app.config['TRACK_MODIFICATIONS'] = False
 
-# Cấu hình đường dẫn thư mục static linh hoạt cho Render
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-if os.path.exists(os.path.join(BASE_DIR, 'Share_media')):
-    app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'Share_media/static/uploads')
-    app.template_folder = os.path.join(BASE_DIR, 'Share_media/templates')
-else:
-    app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'static/uploads')
-
+app.config['UPLOAD_FOLDER'] = os.path.join(static_dir, 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -38,7 +34,6 @@ class Media(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     file_type = db.Column(db.String(10), nullable=False)
     uploader = db.Column(db.String(50), nullable=False)
-    is_temporary = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Comment(db.Model):
@@ -46,16 +41,13 @@ class Comment(db.Model):
     content = db.Column(db.String(500), nullable=False)
     uploader = db.Column(db.String(50), nullable=False)
     media_id = db.Column(db.Integer, db.ForeignKey('media.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# Tạo liên kết ngược an toàn không làm lỗi cấu trúc cũ
 Media.comments = db.relationship('Comment', backref='media', cascade="all, delete-orphan", lazy=True)
 
 @app.route('/')
 def index():
     if 'username' not in session:
         return redirect('/login')
-    # Sắp xếp ảnh mới lên trên, ảnh cũ xuống dưới
     all_media = Media.query.order_by(Media.created_at.desc()).all()
     return render_template('index.html', media_list=all_media, current_user=session['username'])
 
@@ -74,7 +66,7 @@ def register():
         new_user = User(username=username, password=password)
         db.session.add(new_user)
         db.session.commit()
-        flash('Đăng ký thành công! Hãy đăng nhập.')
+        flash('Đăng ký thành công!')
         return redirect('/login')
     return render_template('register.html')
 
@@ -91,22 +83,6 @@ def login():
             flash('Sai tài khoản hoặc mật khẩu!')
             return redirect('/login')
     return render_template('login.html')
-
-@app.route('/forgot-password', methods=['GET', 'POST'])
-def forgot_password():
-    if request.method == 'POST':
-        username = request.form.get('username').strip()
-        new_password = request.form.get('new_password').strip()
-        user = User.query.filter_by(username=username).first()
-        if user:
-            user.password = new_password
-            db.session.commit()
-            flash('Đặt lại mật khẩu thành công! Hãy đăng nhập lại.')
-            return redirect('/login')
-        else:
-            flash('Tài khoản không tồn tại trên hệ thống!')
-            return redirect('/forgot-password')
-    return render_template('forgot_password.html')
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -125,24 +101,10 @@ def upload():
         random_hex = secrets.token_hex(8)
         secure_name = f"{random_hex}_{secure_filename(file.filename)}"
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_name))
-        new_media = Media(filename=secure_name, file_type=file_type, uploader=session['username'], is_temporary=False)
+        new_media = Media(filename=secure_name, file_type=file_type, uploader=session['username'])
         db.session.add(new_media)
         db.session.commit()
         flash('Đăng tải thành công!')
-    return redirect('/')
-
-@app.route('/comment/<int:media_id>', methods=['POST'])
-def add_comment(media_id):
-    if 'username' not in session:
-        return redirect('/login')
-    content = request.form.get('content', '').strip()
-    if content:
-        try:
-            new_comment = Comment(content=content, uploader=session['username'], media_id=media_id)
-            db.session.add(new_comment)
-            db.session.commit()
-        except:
-            db.session.rollback()
     return redirect('/')
 
 @app.route('/delete/<int:media_id>', methods=['POST'])
