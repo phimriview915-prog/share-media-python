@@ -7,8 +7,8 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
-# Đổi tên file db sang v6 để hệ thống tự động reset bảng sạch sẽ, không lo bị lỗi cũ chặn upload
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v6.db'
+# Đổi tên file cơ sở dữ liệu sang v7 để Render tự làm sạch hệ thống cũ, tránh lỗi xung đột cấu trúc
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v7.db'
 app.config['TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -163,13 +163,14 @@ def add_comment(media_id):
         db.session.commit()
     return redirect('/')
 
-# CHỨC NĂNG XÓA: Nhận diện đúng chủ bài đăng, thực hiện xóa tệp cứng và dữ liệu database
+# --- CHỨC NĂNG XÓA BÀI VIẾT ---
 @app.route('/delete/<int:media_id>', methods=['POST'])
 def delete_media(media_id):
     if 'username' not in session:
         return redirect('/login')
     item = Media.query.get_or_404(media_id)
-    # Bảo mật: Chỉ cho phép người tải lên (hoặc tài khoản có tên là admin) mới xóa được bài
+    
+    # Bảo mật: Chỉ cho phép người đăng HOẶC tài khoản tên 'admin' mới được xóa bài
     if item.uploader == session['username'] or session['username'] == 'admin':
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], item.filename)
         if os.path.exists(file_path):
@@ -177,7 +178,7 @@ def delete_media(media_id):
             except: pass
         db.session.delete(item)
         db.session.commit()
-        flash('Đã xóa bài viết thành công!')
+        flash('Đã xóa bài viết khỏi bảng tin thành công!')
     else:
         flash('Bạn không có quyền xóa bài viết này!')
     return redirect('/')
