@@ -1,16 +1,16 @@
-import os
+ import os
 import secrets
 from flask import Flask, render_template, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
+# Định nghĩa đường dẫn đồng bộ với cấu trúc thư mục Share_media trên GitHub
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 template_dir = os.path.join(BASE_DIR, 'Share_media', 'templates')
 static_dir = os.path.join(BASE_DIR, 'Share_media', 'static')
 
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
-# Giữ nguyên database cũ để không bị mất ảnh cô gái đã đăng
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media.db'
 app.config['TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(static_dir, 'uploads')
@@ -45,21 +45,10 @@ def upload():
         random_hex = secrets.token_hex(8)
         secure_name = f"{random_hex}_{secure_filename(file.filename)}"
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_name))
+        
         new_media = Media(filename=secure_name, file_type=file_type)
         db.session.add(new_media)
         db.session.commit()
-    return redirect('/')
-
-# THÊM ĐƯỜNG DẪN XỬ LÝ XÓA ẢNH/VIDEO
-@app.route('/delete/<int:media_id>', methods=['POST'])
-def delete_media(media_id):
-    item = Media.query.get_or_404(media_id)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], item.filename)
-    if os.path.exists(file_path):
-        try: os.remove(file_path)
-        except: pass
-    db.session.delete(item)
-    db.session.commit()
     return redirect('/')
 
 if __name__ == '__main__':
