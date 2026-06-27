@@ -10,6 +10,7 @@
         .text-gradient { background: linear-gradient(45deg, #007bff, #d63384); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .card { border: none; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .comment-box { max-height: 180px; overflow-y: auto; }
+        /* Tối ưu vùng chọn file siêu to, nhạy cho điện thoại */
         .form-control-file-custom {
             padding: 15px;
             border-radius: 12px;
@@ -57,7 +58,7 @@
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="storage_type" value="temporary" id="temp">
-                        <label class="form-check-label fw-bold text-warning" for="temp">Tin tạm thời (Xóa sau 24h) ⏳</label>
+                        <label class="form-check-label fw-bold text-warning" for="temp">Tin tạm thời (24h) ⏳</label>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold py-2">Chia sẻ ngay 🚀</button>
@@ -77,8 +78,8 @@
                     </div>
                     
                     {% if current_user == item.uploader or current_user == 'admin' %}
-                        <form action="/delete/{{ item.id }}" method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa bài viết/video này không?');">
-                            <button type="submit" class="btn btn-sm btn-danger rounded-pill px-3 fw-bold">🗑️ Xóa bài</button>
+                        <form action="/delete/{{ item.id }}" method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa bài viết này không?');">
+                            <button type="submit" class="btn btn-sm btn-danger rounded-pill px-3 fw-bold">🗑️ Xóa</button>
                         </form>
                     {% endif %}
                 </div>
@@ -111,7 +112,7 @@
             </div>
         {% else %}
             <div class="text-center py-5">
-                <p class="text-muted fs-5">Bảng tin trống. Hãy đăng bức ảnh/video đầu tiên lên nhé! 🚀</p>
+                <p class="text-muted fs-5">Bảng tin trống. Hãy đăng tệp đầu tiên nhé! 🚀</p>
             </div>
         {% endfor %}
     </div>
