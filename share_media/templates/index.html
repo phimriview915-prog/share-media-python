@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -15,12 +15,27 @@
 <body>
 
     <nav class="navbar navbar-expand-lg navbar-dark mb-4">
-        <div class="container">
+        <div class="container d-flex justify-content-between align-items-center">
             <a class="navbar-brand" href="/">🎬 SHARE MEDIA</a>
+            <div class="text-white small">
+                Xin chào, <strong class="text-warning">{{ current_user }}</strong>! 
+                <a href="/logout" class="btn btn-sm btn-outline-danger ms-2 py-0 px-2" style="font-size: 12px;">Đăng xuất</a>
+            </div>
         </div>
     </nav>
 
     <div class="container" style="max-width: 800px;">
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-success py-2 text-center small mb-3" role="alert">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         <div class="card p-4 mb-4">
             <h5 class="card-title fw-bold">📥 Tải lên ảnh hoặc video của bạn</h5>
             <form action="/upload" method="POST" enctype="multipart/form-data" class="mt-3">
