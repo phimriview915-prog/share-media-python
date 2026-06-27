@@ -1,4 +1,4 @@
- import os
+import os
 import secrets
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash
@@ -7,8 +7,8 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
-# Đổi hẳn sang db_v5 để hệ thống tự động reset bảng sạch sẽ, tránh lỗi xung đột cấu trúc cũ gây lỗi không up được ảnh
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v5.db'
+# Đổi tên file db sang v6 để hệ thống tự động reset bảng sạch sẽ, không lo bị lỗi cũ chặn upload
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v6.db'
 app.config['TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -139,7 +139,6 @@ def upload():
         random_hex = secrets.token_hex(8)
         secure_name = f"{random_hex}_{secure_filename(file.filename)}"
         
-        # Lưu file vật lý vào thư mục static
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_name))
         
         new_media = Media(
@@ -164,12 +163,14 @@ def add_comment(media_id):
         db.session.commit()
     return redirect('/')
 
+# CHỨC NĂNG XÓA: Nhận diện đúng chủ bài đăng, thực hiện xóa tệp cứng và dữ liệu database
 @app.route('/delete/<int:media_id>', methods=['POST'])
 def delete_media(media_id):
     if 'username' not in session:
         return redirect('/login')
     item = Media.query.get_or_404(media_id)
-    if item.uploader == session['username']:
+    # Bảo mật: Chỉ cho phép người tải lên (hoặc tài khoản có tên là admin) mới xóa được bài
+    if item.uploader == session['username'] or session['username'] == 'admin':
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], item.filename)
         if os.path.exists(file_path):
             try: os.remove(file_path)
@@ -177,6 +178,8 @@ def delete_media(media_id):
         db.session.delete(item)
         db.session.commit()
         flash('Đã xóa bài viết thành công!')
+    else:
+        flash('Bạn không có quyền xóa bài viết này!')
     return redirect('/')
 
 @app.route('/logout')
