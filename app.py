@@ -7,10 +7,19 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
-# Đổi tên file cơ sở dữ liệu sang v7 để Render tự làm sạch hệ thống cũ, tránh lỗi xung đột cấu trúc
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media_v7.db'
+
+# GIỮ NGUYÊN FILE DATABASE CŨ CỦA BẠN ĐỂ KHÔI PHỤC LẠI ẢNH ĐÃ ĐĂNG
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///share_media.db'
 app.config['TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
+
+# Cấu hình đường dẫn thư mục static linh hoạt cho Render
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+if os.path.exists(os.path.join(BASE_DIR, 'Share_media')):
+    app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'Share_media/static/uploads')
+    app.template_folder = os.path.join(BASE_DIR, 'Share_media/templates')
+else:
+    app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'static/uploads')
+
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -31,7 +40,6 @@ class Media(db.Model):
     uploader = db.Column(db.String(50), nullable=False)
     is_temporary = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    comments = db.relationship('Comment', backref='media', cascade="all, delete-orphan", lazy=True)
 
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -40,24 +48,14 @@ class Comment(db.Model):
     media_id = db.Column(db.Integer, db.ForeignKey('media.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-def clean_expired_media():
-    now = datetime.utcnow()
-    expired_items = Media.query.filter(Media.is_temporary == True, Media.created_at < now - timedelta(hours=24)).all()
-    for item in expired_items:
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], item.filename)
-        if os.path.exists(file_path):
-            try: os.remove(file_path)
-            except: pass
-        db.session.delete(item)
-    if expired_items:
-        db.session.commit()
+# Tạo liên kết ngược an toàn không làm lỗi cấu trúc cũ
+Media.comments = db.relationship('Comment', backref='media', cascade="all, delete-orphan", lazy=True)
 
-# --- ROUTES CONTROL ---
 @app.route('/')
 def index():
     if 'username' not in session:
         return redirect('/login')
-    clean_expired_media()
+    # Sắp xếp ảnh mới lên trên, ảnh cũ xuống dưới
     all_media = Media.query.order_by(Media.created_at.desc()).all()
     return render_template('index.html', media_list=all_media, current_user=session['username'])
 
@@ -115,41 +113,22 @@ def upload():
     if 'username' not in session:
         return redirect('/login')
     if 'file' not in request.files:
-        flash('Không tìm thấy tệp gửi lên!')
+        flash('Không tìm thấy tệp!')
         return redirect('/')
-    
     file = request.files['file']
     if file.filename == '':
-        flash('Bạn chưa chọn file ảnh/video nào!')
+        flash('Bạn chưa chọn file!')
         return redirect('/')
-        
-    storage_type = request.form.get('storage_type')
-    is_temporary = (storage_type == 'temporary')
-    
     if file:
         ext = file.filename.split('.')[-1].lower()
-        if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
-            file_type = 'image'
-        elif ext in ['mp4', 'mov', 'avi', 'mkv', 'webm']:
-            file_type = 'video'
-        else:
-            flash('Định dạng file không hỗ trợ!')
-            return redirect('/')
-            
+        file_type = 'image' if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] else 'video'
         random_hex = secrets.token_hex(8)
         secure_name = f"{random_hex}_{secure_filename(file.filename)}"
-        
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_name))
-        
-        new_media = Media(
-            filename=secure_name,
-            file_type=file_type,
-            uploader=session['username'],
-            is_temporary=is_temporary
-        )
+        new_media = Media(filename=secure_name, file_type=file_type, uploader=session['username'], is_temporary=False)
         db.session.add(new_media)
         db.session.commit()
-        flash('Đăng tải bài viết thành công!')
+        flash('Đăng tải thành công!')
     return redirect('/')
 
 @app.route('/comment/<int:media_id>', methods=['POST'])
@@ -158,19 +137,19 @@ def add_comment(media_id):
         return redirect('/login')
     content = request.form.get('content', '').strip()
     if content:
-        new_comment = Comment(content=content, uploader=session['username'], media_id=media_id)
-        db.session.add(new_comment)
-        db.session.commit()
+        try:
+            new_comment = Comment(content=content, uploader=session['username'], media_id=media_id)
+            db.session.add(new_comment)
+            db.session.commit()
+        except:
+            db.session.rollback()
     return redirect('/')
 
-# --- CHỨC NĂNG XÓA BÀI VIẾT ---
 @app.route('/delete/<int:media_id>', methods=['POST'])
 def delete_media(media_id):
     if 'username' not in session:
         return redirect('/login')
     item = Media.query.get_or_404(media_id)
-    
-    # Bảo mật: Chỉ cho phép người đăng HOẶC tài khoản tên 'admin' mới được xóa bài
     if item.uploader == session['username'] or session['username'] == 'admin':
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], item.filename)
         if os.path.exists(file_path):
@@ -178,9 +157,7 @@ def delete_media(media_id):
             except: pass
         db.session.delete(item)
         db.session.commit()
-        flash('Đã xóa bài viết khỏi bảng tin thành công!')
-    else:
-        flash('Bạn không có quyền xóa bài viết này!')
+        flash('Đã xóa bài viết thành công!')
     return redirect('/')
 
 @app.route('/logout')
